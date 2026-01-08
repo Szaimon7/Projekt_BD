@@ -15,7 +15,7 @@ NUM_EMPLOYEES = 15
 fake = Faker('pl_PL')
 
 def create_schema(cursor):
-    # Usunięcie starych tabel jeśli istnieją
+    # usuniecie starych tabelek
     cursor.executescript("""
         DROP TABLE IF EXISTS Incydenty;
         DROP TABLE IF EXISTS Aktywnosci_Atrakcje;
@@ -82,7 +82,7 @@ def create_schema(cursor):
     print("Schemat bazy utworzony pomyślnie.")
 
 def populate_data(cursor):
-    # 1. Atrakcje 
+    # 1. atrakcje 
     atrakcje_lista = [
         ("Hyperion", "Rollercoaster", False, 150.0),
         ("Symulator kopania kryptowalut", "Edukacja", True, 20.0),
@@ -99,59 +99,59 @@ def populate_data(cursor):
         cursor.execute("INSERT INTO Atrakcje (nazwa, typ, czy_vr_dostepne, koszt_utrzymania_h, data_zakupu) VALUES (?,?,?,?,?)",
                        (a[0], a[1], a[2], a[3], fake.date_between(start_date='-5y', end_date='-2y')))
 
-    # 2. Cenniki i Ubezpieczenia 
+    # 2. cenniki i ubezpieczenia 
     bilety = [("Standard", 100), ("VIP", 250), ("Student", 60), ("VR", 80)]
     cursor.executemany("INSERT INTO Bilety_Cennik (nazwa, cena) VALUES (?,?)", bilety)
 
     ubezpieczenia = [
-        ("Utrata czapki", 15, 200),
-        ("Atak gołębia", 5, 50),
-        ("Mdłości VR", 10, 100),
-        ("Egzystencjalny lęk", 50, 1000)
+        ("utrata czapki", 15, 200),
+        ("atak golebia", 5, 50),
+        ("mdlosci VR", 10, 100),
+        ("depresja", 50, 1000)
     ]
     cursor.executemany("INSERT INTO Ubezpieczenia_Typy (nazwa, cena, max_wyplata) VALUES (?,?,?)", ubezpieczenia)
 
-    # 3. Pracownicy
+    # 3. pracownicy
     roles = ["Operator", "Kasjer", "Technik", "Ochrona", "Aktor VR"]
     for _ in range(NUM_EMPLOYEES):
         pensja = round(random.uniform(MIN_WAGE, MIN_WAGE * 2.5), 2)
         cursor.execute("INSERT INTO Pracownicy (imie, nazwisko, stanowisko, pensja, data_zatrudnienia) VALUES (?,?,?,?,?)",
                        (fake.first_name(), fake.last_name(), random.choice(roles), pensja, fake.date_between(start_date='-2y', end_date='-1y')))
 
-    # 4. Klienci
+    # 4. klienci
     for _ in range(NUM_GUESTS):
         cursor.execute("INSERT INTO Klienci (imie, nazwisko, data_urodzenia, plec) VALUES (?,?,?,?)",
                        (fake.first_name(), fake.last_name(), fake.date_of_birth(minimum_age=10, maximum_age=70), random.choice(['M', 'K'])))
 
-    # 5. Generowanie ruchu (Wizyty, Aktywności, Incydenty)
+    # 5. generowanie ruchu (wizyty, aktywności, wypadki)
     current_date = START_DATE
     while current_date <= END_DATE:
-        # Losowa liczba gości danego dnia (więcej w weekendy)
+        # losowa liczba gości danego dnia (z przewaga w weekendy)
         is_weekend = current_date.weekday() >= 5
         daily_guests = random.randint(5, 15) if not is_weekend else random.randint(20, 50)
         
-        # Pobierz ID klientów, biletów, ubezpieczeń
+        # pobierz ID klientów biletów i ubezpieczeń
         klient_ids = [row[0] for row in cursor.execute("SELECT id FROM Klienci").fetchall()]
         bilet_ids = [row[0] for row in cursor.execute("SELECT id FROM Bilety_Cennik").fetchall()]
         ubezp_ids = [row[0] for row in cursor.execute("SELECT id FROM Ubezpieczenia_Typy").fetchall()]
         atrakcje = cursor.execute("SELECT id, czy_vr_dostepne FROM Atrakcje").fetchall()
 
-        # Symulacja dnia
+        # symulacja dnia
         todays_visitors = random.sample(klient_ids, min(len(klient_ids), daily_guests))
         
         for k_id in todays_visitors:
-            # Tworzenie wizyty
+            # tworzenie wizyty
             bilet = random.choice(bilet_ids)
             cursor.execute("INSERT INTO Wizyty (klient_id, data_wizyty, bilet_id) VALUES (?,?,?)", (k_id, current_date, bilet))
             wizyta_id = cursor.lastrowid
             
-            # Kupno ubezpieczeń (szansa 60%)
-            if random.random() > 0.4:
+            # kupno ubezpieczeń (szansa 50%)
+            if random.random() > 0.5:
                 wybrane_ubezp = random.sample(ubezp_ids, k=random.randint(1, 2))
                 for u_id in wybrane_ubezp:
                     cursor.execute("INSERT INTO Transakcje_Ubezpieczenia (wizyta_id, ubezpieczenie_id) VALUES (?,?)", (wizyta_id, u_id))
             
-            # Korzystanie z atrakcji 
+            # uzywanie atrakcji 
             liczba_atrakcji = random.randint(3, 8)
             for _ in range(liczba_atrakcji):
                 atr = random.choice(atrakcje)
@@ -161,25 +161,25 @@ def populate_data(cursor):
                                (wizyta_id, atr[0], current_date, tryb_vr))
                 akt_id = cursor.lastrowid
                 
-                # Wypadek (szansa 1%)
+                # wypadek (szansa 1%)
                 if random.random() < 0.01:
                     odszkodowanie = round(random.uniform(50, 500), 2)
                     opis = random.choice(["Zgubiony but", "Obrzydzenie VR", "Atak gołębia", "Wylana cola"])
                     cursor.execute("INSERT INTO Incydenty (aktywnosc_id, opis, wyplacone_odszkodowanie) VALUES (?,?,?)",
                                    (akt_id, opis, odszkodowanie))
 
-        # Przeglądy techniczne i awarie (raz na tydzień lub losowo)
+        # przeglady techniczne i awarie (raz na tydzień lub losowo)
         if random.random() < 0.1:
             atr = random.choice(atrakcje)
             koszt = round(random.uniform(200, 2000), 2)
             awaria = random.choice([True, False])
-            opis_serwisu = "Wymiana łożysk" if not awaria else "Krytyczny błąd AI"
+            opis_serwisu = "wymiana lozyska" if not awaria else "blad AI "
             cursor.execute("INSERT INTO Przeglady_Techniczne (atrakcja_id, data_przegladu, koszt, czy_awaria, opis) VALUES (?,?,?,?,?)",
                            (atr[0], current_date, koszt, awaria, opis_serwisu))
 
         current_date += timedelta(days=1)
     
-    print("Baza wypełniona danymi.")
+    print("baza wypelniona danymi")
 
 # Uruchomienie
 conn = sqlite3.connect(DB_NAME)
