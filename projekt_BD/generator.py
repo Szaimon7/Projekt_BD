@@ -4,8 +4,7 @@ from faker import Faker
 from datetime import datetime, timedelta
 import pandas as pd
 
-# !!!SKONCZONE ZALOZENIA 1 I 2 DO "Rozmiar bazy powinien być rozsądny (porównywalny z tym, co może potrzebować rzeczywista firma prowadząca park rozrywki). Czas działania firmy to przynajmniej rok, zatrudnia obecnie minimum 5 pracowników, wypłacając im adekwatne i zgodne z prawem wynagrodzenie. W poprzednim roku działalności przyjęto przynajmniej 500 gości, którzy bawili się na przynajmniej 10 atrakcjach."
-# Konfiguracja
+# !!!SKONCZONE ZALOZENIA 1 I 2 
 DB_NAME = "Projekt_bazy.db"
 START_DATE = datetime(2024, 1, 1)
 END_DATE = datetime(2025, 1, 1)
