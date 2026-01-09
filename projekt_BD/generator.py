@@ -139,7 +139,7 @@ def populate_data(cursor):
     ]
     
     for i in range(NUM_EMPLOYEES):
-        stanowisko = random.choice(stanowisko)
+        stanowiska = random.choice(stanowiska)
         pensja = round(random.uniform(stanowisko[1], stanowisko[2]), 2) #generowanie pensji
         
         #generowanie daty zatrudnienia
