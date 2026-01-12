@@ -139,8 +139,8 @@ def populate_data(cursor):
     ]
     
     for i in range(NUM_EMPLOYEES):
-        stanowiska = random.choice(stanowiska)
-        pensja = round(random.uniform(stanowisko[1], stanowisko[2]), 2) #generowanie pensji
+        stanowiska = random.choice(stanowisko)
+        pensja = round(random.uniform(stanowiska[1], stanowiska[2]), 2) #generowanie pensji
         
         #generowanie daty zatrudnienia
         months_ago = random.randint(12, 24) #minimum rok pracy w firmie
@@ -149,7 +149,7 @@ def populate_data(cursor):
         
         #dodanie do bazy
         cursor.execute("INSERT INTO Pracownicy (imie, nazwisko, stanowisko, pensja, data_zatrudnienia) VALUES (?,?,?,?,?)",
-        (fake.person.first_name(), fake.person.last_name(), stanowisko[0], pensja, data_zatrudnienia.date()))
+        (fake.person.first_name(), fake.person.last_name(), stanowiska[0], pensja, data_zatrudnienia.date()))
         
 
     #klienci
