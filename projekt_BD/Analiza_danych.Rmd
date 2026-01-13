@@ -1,0 +1,212 @@
+---
+title: "Analiza danych"
+date: "2026-01-18"
+output: 
+  html_document:
+      number_sections: true 
+      toc: true  
+      toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r połączenie z bazą,warning=FALSE}
+library(DBI)
+library(RSQLite)
+library(ggplot2)
+library(knitr)
+con <- dbConnect(
+  SQLite(),
+  dbname="Projekt_bazy.db"
+)
+```
+
+```{r przypisanie danych}
+Aktywnosci_Atrakcje <- dbGetQuery(con,"SELECT * FROM Aktywnosci_Atrakcje")
+Atrakcje <- dbGetQuery(con,"SELECT * FROM Atrakcje")
+Bilety_Cennik <- dbGetQuery(con,"SELECT * FROM Bilety_Cennik")
+Incydenty <- dbGetQuery(con,"SELECT * FROM Incydenty")
+Klienci <- dbGetQuery(con,"SELECT * FROM Klienci")
+Pracownicy <- dbGetQuery(con,"SELECT * FROM Pracownicy")
+Przeglady_Techniczne <- dbGetQuery(con,"SELECT * FROM Przeglady_Techniczne")
+Transakcje_Ubezpieczenia <- dbGetQuery(con,"SELECT * FROM Transakcje_Ubezpieczenia")
+Ubezpieczenia_Typy <- dbGetQuery(con,"SELECT * FROM Ubezpieczenia_Typy")
+Wizyty <- dbGetQuery(con,"SELECT * FROM Wizyty")
+```
+
+# Analiza dotycząca atrakcji
+
+## Najpopularniejsze atrakcje
+
+```{r najpopularniejsze atrakcje}
+najpopularniejsze_atrakcje <- dbGetQuery(con,"SELECT
+Atrakcje.nazwa AS atrakcja,
+COUNT(Aktywnosci_Atrakcje.id) AS liczba_skorzystan
+FROM Atrakcje JOIN Aktywnosci_Atrakcje
+ON Atrakcje.id=Aktywnosci_Atrakcje.atrakcja_id
+GROUP BY Atrakcje.id
+ORDER BY liczba_skorzystan DESC;
+")
+kable(najpopularniejsze_atrakcje,align="c")
+```
+
+Powyższa tabelka przedstawia atrakcje od najbardziej do najmniej popularnych. Na ogół widać, że poszczególne atrakcje cieszą się podobnym zainteresowaniem.
+
+
+## Porównanie kosztów i zysków
+
+```{r porównanie kosztów i zysków}
+koszty_i_zyski <- dbGetQuery(con,"SELECT
+Atrakcje.nazwa AS atrakcja,
+Atrakcje.koszt_utrzymania_h,
+IFNULL(Koszty_Przegladow.koszt_przegladow,0) AS koszt_przegladow,
+COUNT(Aktywnosci_Atrakcje.id) AS liczba_skorzystan,
+IFNULL(SUM(Bilety_Cennik.cena),0) AS przychod_z_biletow,
+(IFNULL(SUM(Bilety_Cennik.cena),0)-Atrakcje.koszt_utrzymania_h*COUNT(Aktywnosci_Atrakcje.id)-IFNULL(Koszty_Przegladow.koszt_przegladow,0)) AS zysk
+FROM Atrakcje LEFT JOIN Aktywnosci_Atrakcje
+ON Atrakcje.id=Aktywnosci_Atrakcje.atrakcja_id
+LEFT JOIN Wizyty ON Wizyty.id=Aktywnosci_Atrakcje.wizyta_id
+LEFT JOIN Bilety_Cennik 
+ON Bilety_Cennik.id=Wizyty.bilet_id
+LEFT JOIN (
+SELECT atrakcja_id,SUM(koszt) AS koszt_przegladow
+FROM Przeglady_Techniczne
+GROUP BY atrakcja_id
+) AS Koszty_Przegladow
+ON Koszty_Przegladow.atrakcja_id=Atrakcje.id
+GROUP BY Atrakcje.id
+ORDER BY zysk DESC;
+")
+kable(koszty_i_zyski,caption="Informacje ogólne o kosztach i zyskach poszczególnych atrakcji",digits=2,align="c")
+koszty_i_zyski$całkowity_koszt <- koszty_i_zyski$koszt_utrzymania_h*koszty_i_zyski$liczba_skorzystan+koszty_i_zyski$koszt_przegladow
+uproszczone_dane <- koszty_i_zyski[c("atrakcja","całkowity_koszt","zysk")]
+kable(uproszczone_dane,caption="Informacje konkretniejsze",digits=2,align="c")
+```
+
+Jak widać na podstawie tabel, atrakcje są jak najbardziej opłacalne z wyjątkiem: **`r uproszczone_dane$atrakcja[uproszczone_dane$zysk<0]`**. W ogólności czasowa niedostępność poszczególnych atrakcji nie ma bezpośredniego wpływu na przychody parku. Wynika to z tego, iż klienci płacą za bilety, a nie za możliwość skorzystania z konkretnej atrakcji. Może to jednak mieć pośredni wpływ na przychody parku, gdyż klient mógłby chcieć odwiedzić park z myślą o skorzystaniu z konkretnych atrakcji, wówczas w momencie gdy takowe atrakcje byłyby niedostępne, to firma nie zarobiłaby za jego bilet.
+
+# Analiza dotycząca liczby obsłużonych klientów w danym miesiącu
+
+```{r klienci w miesiącu}
+klienci_w_miesiącu <- dbGetQuery(con,"SELECT strftime('%Y-%m',data_wizyty) AS miesiac,
+COUNT(*) AS liczba_klientow FROM Wizyty
+GROUP BY miesiac
+ORDER BY miesiac;
+")
+# Pomijamy styczeń 2025 roku bo ma niepełne dane
+klienci_w_miesiącu2 <- klienci_w_miesiącu[-nrow(klienci_w_miesiącu),]
+ggplot(klienci_w_miesiącu2,aes(x=miesiac,y=liczba_klientow))+
+         geom_col()+
+         labs(
+           title="Obsłużeni klienci w danym miesiącu",
+           x="Miesiąc",
+           y="Liczba klientów"
+         )
+```
+
+Z wykresu wynika, iż firma ma stałą liczbę klientów w poszczególnych miesiącach oraz miewa miesiące szczytu gdzie ma dużo więcej klientów niż zazwyczaj. Ma to miejsce w wakacje i w święta. Zatem firma ma się dobrze i zdecydowanie nie podupada.
+
+# Analiza dotycząca bezpieczeństwa poszczególnych atrakcji
+
+```{r bezpieczeństwo atrakcji}
+bezpieczeństwo_atrakcji <- dbGetQuery(con,"SELECT 
+Atrakcje.nazwa AS atrakcja,
+COUNT(Incydenty.id) AS liczba_incydentow,
+ROUND(AVG(Incydenty.wyplacone_odszkodowanie),2) AS srednie_odszkodowanie
+FROM Atrakcje JOIN Aktywnosci_Atrakcje
+ON Atrakcje.id=Aktywnosci_Atrakcje.atrakcja_id
+LEFT JOIN Incydenty
+ON Aktywnosci_Atrakcje.id=Incydenty.aktywnosc_id
+GROUP BY Atrakcje.id
+ORDER BY liczba_incydentow DESC;
+")
+kable(bezpieczeństwo_atrakcji,align="c")
+```
+
+Atrakcje dostępne w firmie mają na ogół dość podobną liczbę incydentów. Możemy rozważyć zwiększenie bezpieczeństa tych atrakcji, które mają największą wartość średniego odszkodowania.
+
+# Analiza pensji pracowników w zależności od ich stanowiska
+
+```{r Analiza pensji pracowników w zależności od ich stanowiska,fig.width=10}
+średnia_pensja <- dbGetQuery(con,"SELECT
+stanowisko,ROUND(AVG(pensja),2) AS srednia_pensja
+FROM Pracownicy
+GROUP BY stanowisko
+ORDER BY srednia_pensja DESC;
+")
+ggplot(średnia_pensja,aes(x=stanowisko,y=srednia_pensja,fill=srednia_pensja))+
+         geom_col()+
+         labs(
+           title="Średnia pensja w zależności od stanowiska",
+           x="Stanowisko",
+           y="Pensja"
+         )
+```
+
+Na podstawie wykresu możemy zauważyć, że najwięcej w tej firmie zarabiają osoby pracujące na stanowisku: **`r średnia_pensja[1,1]`** i jest to średnio **`r średnia_pensja[1,2]`zł**.
+
+# Analiza dotycząca liczby wystąpień poszczególnych incydentów
+
+Sprawdźmy, które incydenty mają najczęściej miejsce dla tej firmy.
+```{r liczba wystąpień incydentów,fig.width=11.5}
+liczba_wystąpień_incydentów <- dbGetQuery(con,"SELECT
+opis,COUNT(opis) AS liczba_wystapien
+FROM Incydenty
+GROUP BY opis
+ORDER BY liczba_wystapien DESC")
+ggplot(liczba_wystąpień_incydentów,aes(x=opis,y=liczba_wystapien,fill=liczba_wystapien))+
+         geom_col()+
+         labs(
+           title="Liczba wystąpień poszczególnych incydentów",
+           x="Incydent",
+           y="Liczba wystąpień"
+         )
+```
+
+Jak widać do najpopularniejszych incydentów zaliczają się: **`r liczba_wystąpień_incydentów[1,1]`, `r liczba_wystąpień_incydentów[2,1]` oraz `r liczba_wystąpień_incydentów[3,1]`**.
+
+# Analiza dostępnych atrakcji pod kątem awaryjności
+
+```{r awaryjność atrakcji,fig.width=16}
+awaryjność_atrakcji <- dbGetQuery(con,"SELECT
+Atrakcje.nazwa AS atrakcja,
+COUNT(Przeglady_Techniczne.id) AS liczba_awarii
+FROM Atrakcje LEFT JOIN Przeglady_Techniczne
+ON Atrakcje.id=Przeglady_Techniczne.atrakcja_id
+AND Przeglady_Techniczne.czy_awaria=1
+GROUP BY Atrakcje.id
+ORDER BY liczba_awarii DESC;
+")
+kable(awaryjność_atrakcji,align="c")
+```
+
+Do najbardziej awaryjnych atrakcji zaliczają się: **`r awaryjność_atrakcji[1,1]`, `r awaryjność_atrakcji[2,1]` oraz `r awaryjność_atrakcji[3,1]`**.
+
+# Analiza dotycząca ilości sprzedanych biletów w zależności od ich rodzaju
+
+```{r ilość sprzedanych biletów a ich rodzaj}
+ilośćSB_a_rodzaj <- dbGetQuery(con,"SELECT
+Bilety_Cennik.nazwa,
+COUNT(Wizyty.id) AS ilosc_sprzedanych
+FROM Bilety_Cennik LEFT JOIN Wizyty
+ON Bilety_Cennik.id=Wizyty.bilet_id
+GROUP BY Bilety_Cennik.id
+ORDER BY ilosc_sprzedanych DESC;
+")
+ggplot(ilośćSB_a_rodzaj,aes(x=nazwa,y=ilosc_sprzedanych,fill=ilosc_sprzedanych))+
+         geom_col()+
+         labs(
+           title="Ilość sprzedanych biletów w zależności od ich rodzaju",
+           x="Rodzaj biletu",
+           y="Liczba sprzedanych"
+         )
+```
+
+Jak widać na wykresie najlepiej sprzedają się bilety rodzaju: **`r ilośćSB_a_rodzaj[1,1]`**.
+
+```{r rozłączenie}
+dbDisconnect(con)
+```
+
