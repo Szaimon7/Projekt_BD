@@ -1,4 +1,5 @@
 mimesis
 pandas
 matplotlib
-seaborn
+sqlite3
+
